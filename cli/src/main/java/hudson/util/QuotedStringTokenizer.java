@@ -137,144 +137,208 @@ public class QuotedStringTokenizer
 
 
     /* ------------------------------------------------------------ */
-    @Override
-    public boolean hasMoreTokens()
-    {
-        // Already found a token
-        if (_hasToken)
-            return true;
+   /* ------------------------------------------------------------ */
+   public static class TokenReturn 
+   {
+       private boolean isTrue;
+       private BaseTokenState nextState;
+       private boolean escape;
 
-        _lastStart=_i;
+       public TokenReturn ()
+       {
+           isTrue = false;
+       }
+       public TokenReturn (boolean bool, BaseTokenState nState,boolean esc){
+           isTrue = bool;
+           nextState = nState;
+           escape = esc;
+       }  
+       public boolean get_True()
+       {
+           return isTrue;
+       }      
+       public BaseTokenState get_NextState()
+       {
+           return nextState;
+       }
+       public boolean get_escape()
+       {
+           return escape;
+       }
+       public void set_True(boolean t)
+       {
+           isTrue = t;
+       }
+       public void set_escape(boolean e)
+       {
+           escape = e;
+       }
+       public void set_nextState(BaseTokenState state)
+       {
+           nextState = state;
+       }
+   }
+   
+   public class BaseTokenState
+   {
+       public TokenReturn nextState(char c, boolean escape)
+       {
+           TokenReturn retVal = new TokenReturn(false,this,escape);
+           
+           if(_delim.indexOf(c)>=0)
+           {
+               if (_returnDelimiters)
+               {
+                   _token.append(c);
+                   retVal.set_True(_hasToken=true);
+               }
+           }
+           else if (c=='\'' && _single)
+           {
+               if (_returnQuotes)
+                   _token.append(c);
+               retVal.set_nextState(new SingleQuoteState());
+           }
+           else if (c=='\"' && _double)
+           {
+               if (_returnQuotes)
+                   _token.append(c);
+               retVal.set_nextState(new DoubleQuoteState());
+           }
+           else
+           {
+               _token.append(c);
+               _hasToken=true;
+               retVal.set_nextState(new TokenState());
+           }
+           return retVal;
+       }
+   }
+   public class TokenState extends BaseTokenState
+   {
+       public TokenReturn nextState(char c,boolean escape)
+       {
+           TokenReturn retVal = new TokenReturn(false,this,escape);
+           _hasToken=true;
+           if (escape)
+           {
+               retVal.set_escape(false);
+               if(ESCAPABLE_CHARS.indexOf(c)<0)
+                   _token.append('\\');
+               _token.append(c);
+           }
+           else if(_delim.indexOf(c)>=0)
+           {
+               if (_returnDelimiters)
+                   _i--;
+               retVal.set_True(_hasToken);
+           }
+           else if (c=='\'' && _single)
+           {
+               if (_returnQuotes)
+                   _token.append(c);
+               retVal.set_nextState(new SingleQuoteState());
+           }
+           else if (c=='\"' && _double)
+           {
+               if (_returnQuotes)
+                   _token.append(c);
+               retVal.set_nextState(new DoubleQuoteState());
+           }
+           else if (c=='\\')
+           {
+               retVal.set_escape(true);
+           }
+           else
+               _token.append(c);
+           return retVal;
+       }
+   }
+   public class SingleQuoteState extends BaseTokenState 
+   {
+       public TokenReturn nextState(char c, boolean escape)
+       {
+           TokenReturn retVal = new TokenReturn(false,this,escape);
+           _hasToken=true;
+           if (escape)
+           {
+               retVal.set_escape(false);
+               if(ESCAPABLE_CHARS.indexOf(c)<0)
+                   _token.append('\\');
+               _token.append(c);
+           }
+           else if (c=='\'')
+           {
+               if (_returnQuotes)
+                   _token.append(c);
+               retVal.set_nextState(new TokenState());
+           }
+           else if (c=='\\')
+           {
+               if (_returnQuotes)
+                   _token.append(c);
+               retVal.set_escape(true);
+           }
+           else
+               _token.append(c);
+           return retVal;
 
-        int state=0;
-        boolean escape=false;
-        while (_i<_string.length())
-        {
-            char c=_string.charAt(_i++);
+       }
+   }
+   public class DoubleQuoteState extends BaseTokenState
+   {
+       public TokenReturn nextState(char c, boolean escape)
+       {
+           TokenReturn retVal = new TokenReturn(false,this,escape);
+           _hasToken=true;
+           if (escape)
+           {
+               retVal.escape=false;
+               if(ESCAPABLE_CHARS.indexOf(c)<0)
+                   _token.append('\\');
+               _token.append(c);
+           }
+           else if (c=='\"')
+           {
+               if (_returnQuotes)
+                   _token.append(c);
+               retVal.nextState = new TokenState();
+           }
+           else if (c=='\\')
+           {
+               if (_returnQuotes)
+                   _token.append(c);
+               retVal.escape=true;
+           }
+           else
+               _token.append(c);
+           return retVal;
+       }
+   }
+   @Override
+   public boolean hasMoreTokens()
+   {
+       // Already found a token
+       if (_hasToken)
+           return true;
 
-            switch (state)
-            {
-              case 0: // Start
-                  if(_delim.indexOf(c)>=0)
-                  {
-                      if (_returnDelimiters)
-                      {
-                          _token.append(c);
-                          return _hasToken=true;
-                      }
-                  }
-                  else if (c=='\'' && _single)
-                  {
-                      if (_returnQuotes)
-                          _token.append(c);
-                      state=2;
-                  }
-                  else if (c=='\"' && _double)
-                  {
-                      if (_returnQuotes)
-                          _token.append(c);
-                      state=3;
-                  }
-                  else
-                  {
-                      _token.append(c);
-                      _hasToken=true;
-                      state=1;
-                  }
-                  continue;
+       _lastStart=_i;
 
-              case 1: // Token
-                  _hasToken=true;
-                  if (escape)
-                  {
-                      escape=false;
-                      if(ESCAPABLE_CHARS.indexOf(c)<0)
-                          _token.append('\\');
-                      _token.append(c);
-                  }
-                  else if(_delim.indexOf(c)>=0)
-                  {
-                      if (_returnDelimiters)
-                          _i--;
-                      return _hasToken;
-                  }
-                  else if (c=='\'' && _single)
-                  {
-                      if (_returnQuotes)
-                          _token.append(c);
-                      state=2;
-                  }
-                  else if (c=='\"' && _double)
-                  {
-                      if (_returnQuotes)
-                          _token.append(c);
-                      state=3;
-                  }
-                  else if (c=='\\')
-                  {
-                      escape=true;
-                  }
-                  else
-                      _token.append(c);
-                  continue;
+       int state=0;
+       boolean escape=false;
+       TokenReturn tokRet;
+       BaseTokenState nextState = new BaseTokenState();
+       while (_i<_string.length())
+       {
+           char c=_string.charAt(_i++);
+           tokRet = nextState.nextState(c, escape);
+           escape = tokRet.escape;
+           nextState = tokRet.nextState;
+           if(tokRet.isTrue)return true;
+       }
 
-
-              case 2: // Single Quote
-                  _hasToken=true;
-                  if (escape)
-                  {
-                      escape=false;
-                      if(ESCAPABLE_CHARS.indexOf(c)<0)
-                          _token.append('\\');
-                      _token.append(c);
-                  }
-                  else if (c=='\'')
-                  {
-                      if (_returnQuotes)
-                          _token.append(c);
-                      state=1;
-                  }
-                  else if (c=='\\')
-                  {
-                      if (_returnQuotes)
-                          _token.append(c);
-                      escape=true;
-                  }
-                  else
-                      _token.append(c);
-                  continue;
-
-
-              case 3: // Double Quote
-                  _hasToken=true;
-                  if (escape)
-                  {
-                      escape=false;
-                      if(ESCAPABLE_CHARS.indexOf(c)<0)
-                          _token.append('\\');
-                      _token.append(c);
-                  }
-                  else if (c=='\"')
-                  {
-                      if (_returnQuotes)
-                          _token.append(c);
-                      state=1;
-                  }
-                  else if (c=='\\')
-                  {
-                      if (_returnQuotes)
-                          _token.append(c);
-                      escape=true;
-                  }
-                  else
-                      _token.append(c);
-                  continue;
-            }
-        }
-
-        return _hasToken;
-    }
-
+       return _hasToken;
+   }
     /* ------------------------------------------------------------ */
     @Override
     public String nextToken()
